@@ -218,20 +218,89 @@ export default function Home() {
   }, [generatedEmail]);
 
   const formatEmailHtml = (text: string): string => {
-    // Convert markdown-ish formatting to HTML for display
-    let html = text
-      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-      .replace(/\*(.+?)\*/g, "<em>$1</em>")
-      .replace(/^### (.+)$/gm, '<h3 class="text-cyan-400 font-semibold mt-4 mb-1">$1</h3>')
-      .replace(/^## (.+)$/gm, '<h2 class="text-cyan-400 font-semibold mt-5 mb-2 text-lg">$1</h2>')
-      .replace(/^# (.+)$/gm, '<h1 class="text-cyan-300 font-bold mt-6 mb-2 text-xl">$1</h1>')
-      .replace(/^Subject:\s*(.+)$/gm, '<div class="bg-cyan-950/40 border border-cyan-800/30 rounded px-4 py-2 mb-4 text-cyan-300 font-semibold">Subject: $1</div>')
-      .replace(/^- (.+)$/gm, '<li class="ml-4 mb-1">$1</li>')
-      .replace(/^(\d+)\.\s+(.+)$/gm, '<div class="mt-4 mb-2"><span class="text-cyan-400 font-bold">$1.</span> $2</div>')
-      .replace(/\n\n/g, "</p><p class='mb-3'>")
-      .replace(/\n/g, "<br>");
+    // Step 1: Strip unwanted special characters (€, ™, ©, ®, etc.)
+    let clean = text
+      .replace(/[€™©®†‡§¶]/g, "")
+      .replace(/\u200B/g, "") // zero-width space
+      .replace(/\u00A0/g, " "); // non-breaking space → normal space
 
-    return `<p class='mb-3'>${html}</p>`;
+    // Step 2: Process line by line for clean rendering
+    const lines = clean.split("\n");
+    const htmlLines: string[] = [];
+    let inList = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i];
+
+      // Subject line — special styling
+      const subjectMatch = line.match(/^Subject:\s*(.+)$/);
+      if (subjectMatch) {
+        if (inList) { htmlLines.push("</ul>"); inList = false; }
+        htmlLines.push('<div class="bg-cyan-950/40 border border-cyan-800/30 rounded px-4 py-2 mb-4 text-cyan-300 font-semibold">Subject: ' + subjectMatch[1] + "</div>");
+        continue;
+      }
+
+      // Headers: ### / ## / #
+      if (line.match(/^###\s+/)) {
+        if (inList) { htmlLines.push("</ul>"); inList = false; }
+        const content = line.replace(/^###\s+/, "").replace(/\*+/g, "");
+        htmlLines.push('<h3 class="text-cyan-400 font-semibold mt-4 mb-1">' + content + "</h3>");
+        continue;
+      }
+      if (line.match(/^##\s+/)) {
+        if (inList) { htmlLines.push("</ul>"); inList = false; }
+        const content = line.replace(/^##\s+/, "").replace(/\*+/g, "");
+        htmlLines.push('<h2 class="text-cyan-400 font-semibold mt-5 mb-2 text-lg">' + content + "</h2>");
+        continue;
+      }
+      if (line.match(/^#\s+/)) {
+        if (inList) { htmlLines.push("</ul>"); inList = false; }
+        const content = line.replace(/^#\s+/, "").replace(/\*+/g, "");
+        htmlLines.push('<h1 class="text-cyan-300 font-bold mt-6 mb-2 text-xl">' + content + "</h1>");
+        continue;
+      }
+
+      // Numbered sections: "1. Title" or "1) Title"
+      const numMatch = line.match(/^(\d+)[.)]\s+(.+)$/);
+      if (numMatch) {
+        if (inList) { htmlLines.push("</ul>"); inList = false; }
+        const content = numMatch[2].replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/\*(.+?)\*/g, "$1");
+        htmlLines.push('<div class="mt-4 mb-2"><span class="text-cyan-400 font-bold">' + numMatch[1] + ".</span> " + content + "</div>");
+        continue;
+      }
+
+      // Bullet points: - or •
+      const bulletMatch = line.match(/^\s*[-•]\s+(.+)$/);
+      if (bulletMatch) {
+        if (!inList) { htmlLines.push('<ul class="list-none ml-2 mb-2">'); inList = true; }
+        const content = bulletMatch[1].replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/\*(.+?)\*/g, "$1");
+        htmlLines.push('<li class="mb-1 pl-3 relative before:content-[\'•\'] before:absolute before:left-0 before:text-cyan-600">' + content + "</li>");
+        continue;
+      }
+
+      // Close list if we're no longer in bullets
+      if (inList) { htmlLines.push("</ul>"); inList = false; }
+
+      // Empty line = paragraph break
+      if (line.trim() === "") {
+        htmlLines.push('<div class="h-3"></div>');
+        continue;
+      }
+
+      // Regular text — clean up stray markdown characters
+      let processed = line
+        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>") // bold
+        .replace(/\*([^*]+?)\*/g, "$1") // italics → just text (no stray *)
+        .replace(/^\*+\s*/, "") // leading asterisks
+        .replace(/\s*\*+$/, "") // trailing asterisks
+        .replace(/_{2,}/g, "") // underscores used as separators
+        .replace(/---+/g, '<hr class="border-cyan-900/30 my-3">'); // horizontal rules
+
+      htmlLines.push('<p class="mb-1.5 leading-relaxed">' + processed + "</p>");
+    }
+
+    if (inList) htmlLines.push("</ul>");
+    return htmlLines.join("\n");
   };
 
   return (

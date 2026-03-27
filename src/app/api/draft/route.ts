@@ -4,7 +4,7 @@ import { getAuthenticatedClient } from "@/lib/google-auth";
 
 export async function POST(request: NextRequest) {
   try {
-    const client = getAuthenticatedClient();
+    const client = await getAuthenticatedClient();
     if (!client) {
       return Response.json(
         { error: "Not authenticated. Please connect your Gmail first." },
