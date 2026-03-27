@@ -17,6 +17,26 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: "Email body is required" }, { status: 400 });
     }
 
+    // Strip all markdown formatting for clean plain-text email
+    const cleanBody = body
+      .replace(/\*\*\*(.+?)\*\*\*/g, "$1")   // ***bold italic*** → text
+      .replace(/\*\*(.+?)\*\*/g, "$1")        // **bold** → text
+      .replace(/\*(.+?)\*/g, "$1")            // *italic* → text
+      .replace(/^#{1,3}\s+/gm, "")            // ### headers → text
+      .replace(/^\s*[-•]\s+/gm, "- ")         // normalize bullets
+      .replace(/_{2,}/g, "")                   // __ underscores
+      .replace(/~~/g, "")                      // ~~ strikethrough
+      .replace(/`(.+?)`/g, "$1")              // `code` → text
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") // [link](url) → link text
+      .replace(/[€™©®†‡§¶]/g, "")            // special chars
+      .replace(/\u200B/g, "")                  // zero-width space
+      .replace(/---+/g, "---");               // keep simple hr
+
+    const cleanSubject = (subject || "")
+      .replace(/\*\*/g, "")
+      .replace(/\*/g, "")
+      .replace(/#{1,3}\s*/g, "");
+
     const gmail = google.gmail({ version: "v1", auth: client });
 
     // Build RFC 2822 email message
@@ -25,8 +45,8 @@ export async function POST(request: NextRequest) {
       "MIME-Version: 1.0",
     ];
     if (to) messageParts.push("To: " + to);
-    if (subject) messageParts.push("Subject: " + subject);
-    messageParts.push("", body);
+    if (cleanSubject) messageParts.push("Subject: " + cleanSubject);
+    messageParts.push("", cleanBody);
 
     const rawMessage = messageParts.join("\r\n");
 
