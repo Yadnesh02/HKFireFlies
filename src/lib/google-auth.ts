@@ -10,20 +10,30 @@ let storedTokens: {
   email?: string;
 } | null = null;
 
-export function getOAuth2Client() {
+export function getOAuth2Client(redirectUri?: string) {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-  const redirectUri = process.env.GOOGLE_REDIRECT_URI || "http://localhost:3001/api/auth/callback";
 
   if (!clientId || !clientSecret) {
-    throw new Error("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set in .env.local");
+    throw new Error("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set as environment variables");
   }
 
-  return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+  // Use explicit env var, or passed-in URI, or fallback to localhost
+  const uri =
+    process.env.GOOGLE_REDIRECT_URI ||
+    redirectUri ||
+    "http://localhost:3001/api/auth/callback";
+
+  return new google.auth.OAuth2(clientId, clientSecret, uri);
 }
 
-export function getAuthUrl(): string {
-  const client = getOAuth2Client();
+export function getAuthUrl(origin?: string): string {
+  // Build redirect URI from the request origin so it works on any domain
+  const redirectUri = origin
+    ? origin + "/api/auth/callback"
+    : undefined;
+
+  const client = getOAuth2Client(redirectUri);
   return client.generateAuthUrl({
     access_type: "offline",
     scope: SCOPES,
@@ -31,8 +41,12 @@ export function getAuthUrl(): string {
   });
 }
 
-export async function handleCallback(code: string) {
-  const client = getOAuth2Client();
+export async function handleCallback(code: string, origin?: string) {
+  const redirectUri = origin
+    ? origin + "/api/auth/callback"
+    : undefined;
+
+  const client = getOAuth2Client(redirectUri);
   const { tokens } = await client.getToken(code);
   client.setCredentials(tokens);
 
