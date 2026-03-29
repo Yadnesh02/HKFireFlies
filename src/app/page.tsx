@@ -32,26 +32,32 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const emailPanelRef = useRef<HTMLDivElement>(null);
 
-  // Check Gmail auth status on mount and after OAuth redirect
+  // Check Gmail auth from localStorage on mount and after OAuth redirect
   useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const res = await fetch("/api/auth/status");
-        const data = await res.json();
-        if (data.authenticated) {
+    // Check localStorage for existing tokens
+    try {
+      const stored = localStorage.getItem("ff_gmail_tokens");
+      if (stored) {
+        const tokens = JSON.parse(stored);
+        if (tokens.access_token) {
           setGmailConnected(true);
-          setGmailEmail(data.email || "");
+          setGmailEmail(tokens.email || "");
         }
-      } catch {}
-    };
-    checkAuth();
+      }
+    } catch {}
 
     // Check URL params for OAuth callback result
     const params = new URLSearchParams(window.location.search);
     if (params.get("auth_success")) {
-      setGmailConnected(true);
-      setGmailEmail(params.get("email") || "");
-      // Clean URL
+      // Tokens were saved to localStorage by the callback page
+      try {
+        const stored = localStorage.getItem("ff_gmail_tokens");
+        if (stored) {
+          const tokens = JSON.parse(stored);
+          setGmailConnected(true);
+          setGmailEmail(tokens.email || "");
+        }
+      } catch {}
       window.history.replaceState({}, "", "/");
     }
     if (params.get("auth_error")) {
@@ -64,8 +70,8 @@ export default function Home() {
     window.location.href = "/api/auth/google";
   }, []);
 
-  const handleDisconnectGmail = useCallback(async () => {
-    await fetch("/api/auth/status", { method: "DELETE" });
+  const handleDisconnectGmail = useCallback(() => {
+    localStorage.removeItem("ff_gmail_tokens");
     setGmailConnected(false);
     setGmailEmail("");
   }, []);
@@ -77,6 +83,14 @@ export default function Home() {
     setError("");
 
     try {
+      // Get tokens from localStorage
+      const stored = localStorage.getItem("ff_gmail_tokens");
+      if (!stored) {
+        setGmailConnected(false);
+        throw new Error("Gmail not connected. Please connect first.");
+      }
+      const tokens = JSON.parse(stored);
+
       // Extract subject from generated email
       const subjectMatch = generatedEmail.match(/^Subject:\s*(.+)$/m);
       const subject = subjectMatch ? subjectMatch[1].trim() : "Meeting Follow-up";
@@ -87,18 +101,24 @@ export default function Home() {
       const res = await fetch("/api/draft", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject, body }),
+        body: JSON.stringify({ subject, body, tokens }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
         if (res.status === 401) {
+          localStorage.removeItem("ff_gmail_tokens");
           setGmailConnected(false);
           setGmailEmail("");
           throw new Error("Gmail session expired. Please reconnect.");
         }
         throw new Error(data.error || "Failed to save draft");
+      }
+
+      // If server refreshed the token, update localStorage
+      if (data.updatedTokens) {
+        localStorage.setItem("ff_gmail_tokens", JSON.stringify(data.updatedTokens));
       }
 
       setDraftSaved(true);
