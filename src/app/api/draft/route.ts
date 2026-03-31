@@ -50,16 +50,16 @@ export async function POST(request: NextRequest) {
     // Thorough markdown stripping for clean plain-text Gmail draft
     const cleanBody = body
       // Bold+italic: ***text***
-      .replace(/\*{3,}(.+?)\*{3,}/gs, "$1")
-      // Bold: **text** (multiline-safe with dotall)
-      .replace(/\*\*(.+?)\*\*/gs, "$1")
+      .replace(/\*{3,}([\s\S]+?)\*{3,}/g, "$1")
+      // Bold: **text** (multiline-safe)
+      .replace(/\*\*([\s\S]+?)\*\*/g, "$1")
       // Italic: *text* (single line only, avoid matching bullet lists)
-      .replace(/(?<!\*)\*([^*\n]+?)\*(?!\*)/g, "$1")
+      .replace(/([^*])\*([^*\n]+?)\*([^*])/g, "$1$2$3")
       // Stray leading/trailing asterisks on lines
       .replace(/^\*{1,3}\s*/gm, "")
       .replace(/\s*\*{1,3}$/gm, "")
       // Any remaining standalone asterisks (not part of bullet points)
-      .replace(/(?<=\S)\*+(?=\S)/g, "")
+      .replace(/(\S)\*+(\S)/g, "$1$2")
       // Headers: # ## ###
       .replace(/^#{1,3}\s+/gm, "")
       // Bullet points: normalize - or • to clean dashes
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
       .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
       // Underscores used as separators or emphasis
       .replace(/_{2,}/g, "")
-      .replace(/(?<=\S)_([^_\n]+?)_(?=\S)/g, "$1")
+      .replace(/(\S)_([^_\n]+?)_(\S)/g, "$1$2$3")
       // Horizontal rules
       .replace(/^---+$/gm, "---")
       // Special characters that don't belong in email
