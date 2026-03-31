@@ -24,6 +24,14 @@ interface FirefliesRecording {
 
 type MobileTab = "controls" | "recordings" | "email";
 
+const ALLOWED_EMAILS = [
+  "hk@schbang.com",
+  "harsh@schbang.com",
+  "saee.patil@schbang.com",
+  "valentina.misquitta@schbang.com",
+  "yadnesh.rane@schbang.com",
+];
+
 export default function Home() {
   const [mobileTab, setMobileTab] = useState<MobileTab>("controls");
   const [file, setFile] = useState<UploadedFile | null>(null);
@@ -94,7 +102,10 @@ export default function Home() {
     restoreGmailTokens();
   }, []);
 
-  // Fetch Fireflies recordings on mount
+  // Auth gate: only whitelisted emails can use the app
+  const isAuthorized = gmailConnected && ALLOWED_EMAILS.includes(gmailEmail.toLowerCase());
+
+  // Fetch Fireflies recordings only when authorized
   const fetchRecordings = useCallback(async () => {
     setRecordingsLoading(true);
     setRecordingsError("");
@@ -111,8 +122,8 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    fetchRecordings();
-  }, [fetchRecordings]);
+    if (isAuthorized) fetchRecordings();
+  }, [isAuthorized, fetchRecordings]);
 
   const handleSelectRecording = useCallback(async (recording: FirefliesRecording) => {
     if (loadingTranscriptId) return;
@@ -149,6 +160,10 @@ export default function Home() {
     localStorage.removeItem("ff_gmail_tokens");
     setGmailConnected(false);
     setGmailEmail("");
+    setRecordings([]);
+    setFile(null);
+    setGeneratedEmail("");
+    setSelectedRecordingId(null);
   }, []);
 
   const handleSaveDraft = useCallback(async () => {
@@ -407,6 +422,65 @@ export default function Home() {
     if (inList) htmlLines.push("</ul>");
     return htmlLines.join("\n");
   };
+
+  /* ── Auth gate: block access for unauthorized users ── */
+
+  if (!isAuthorized) {
+    return (
+      <div className="h-screen flex flex-col overflow-hidden">
+        <header className="flex items-center justify-between px-3 sm:px-5 py-2 sm:py-2.5 border-b shrink-0" style={{ borderColor: "var(--border-default)" }}>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-bold" style={{ color: "var(--text-primary)" }}>FireFlies</span>
+            <span className="text-xs" style={{ color: "var(--text-muted)" }}>→</span>
+            <span className="text-sm font-bold" style={{ color: "var(--accent-cyan)" }}>Email</span>
+          </div>
+        </header>
+        <div className="flex-1 flex items-center justify-center" style={{ background: "var(--bg-primary)" }}>
+          <div className="text-center max-w-sm px-6">
+            <div className="w-16 h-16 mx-auto mb-6 rounded-2xl flex items-center justify-center" style={{ background: "rgba(6,182,212,0.1)", border: "1px solid rgba(6,182,212,0.2)" }}>
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: "var(--accent-cyan)" }}>
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+            </div>
+            <h1 className="text-xl font-bold mb-2" style={{ color: "var(--text-primary)" }}>Sign in to continue</h1>
+            <p className="text-sm mb-6" style={{ color: "var(--text-muted)" }}>
+              Connect your authorized Google account to access FireFlies Email.
+            </p>
+            {gmailConnected && !isAuthorized && (
+              <div className="mb-4 px-4 py-3 rounded-lg text-xs" style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#ef4444" }}>
+                <span className="font-semibold">{gmailEmail}</span> is not authorized to use this tool. Please sign in with an approved account.
+                <button onClick={handleDisconnectGmail} className="block mx-auto mt-2 px-3 py-1 rounded text-[11px] transition-colors hover:bg-red-900/30"
+                  style={{ color: "var(--text-muted)", border: "1px solid var(--border-default)" }}>
+                  Disconnect
+                </button>
+              </div>
+            )}
+            {!gmailConnected && (
+              <button
+                onClick={handleConnectGmail}
+                className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all hover:opacity-90 active:scale-95"
+                style={{ background: "linear-gradient(135deg, #06b6d4, #3b82f6)", color: "white" }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                  <polyline points="22,6 12,13 2,6" />
+                </svg>
+                Connect Google Account
+              </button>
+            )}
+            {error && (
+              <div className="mt-4 text-xs rounded-lg p-2 border" style={{ background: "rgba(239,68,68,0.08)", borderColor: "rgba(239,68,68,0.2)", color: "#ef4444" }}>
+                {error}
+              </div>
+            )}
+            <div className="mt-8" style={{ color: "rgba(100,116,139,0.4)" }}>
+              <span className="text-[10px] tracking-wide">Made with ❤️ for HK</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   /* ── Shared panel content (reused across breakpoints) ── */
 
