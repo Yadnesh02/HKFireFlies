@@ -26,34 +26,40 @@ export async function GET(request: NextRequest) {
     const profile = await gmail.users.getProfile({ userId: "me" });
     const email = profile.data.emailAddress || "";
 
-    // Build token data to pass to client via postMessage
-    const tokenData = JSON.stringify({
+    // Build token payload — base64 encode to avoid any script injection issues
+    const tokenPayload = {
       access_token: tokens.access_token || "",
       refresh_token: tokens.refresh_token || "",
       expiry_date: tokens.expiry_date || 0,
       email: email,
-    });
+      stored_at: Date.now(),
+    };
+    const encodedTokens = Buffer.from(JSON.stringify(tokenPayload)).toString("base64");
 
-    // Return an HTML page that stores tokens in localStorage and redirects
+    // Return an HTML page that decodes tokens into localStorage and redirects
     const html = `<!DOCTYPE html>
 <html>
 <head><title>Connecting Gmail...</title></head>
 <body style="background:#0a0e1a;color:#06b6d4;display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui;margin:0">
-<div style="text-align:center">
+<div id="root" style="text-align:center">
 <p style="font-size:18px">Gmail connected successfully!</p>
 <p style="font-size:14px;color:#666">Redirecting...</p>
 </div>
 <script>
 try {
-  var tokenData = ${tokenData};
-  localStorage.setItem('ff_gmail_tokens', JSON.stringify(tokenData));
-  window.location.href = '/?auth_success=true&email=' + encodeURIComponent(tokenData.email);
+  var encoded = document.getElementById('root').getAttribute('data-t');
+  var decoded = JSON.parse(atob(encoded));
+  localStorage.setItem('ff_gmail_tokens', JSON.stringify(decoded));
+  window.location.href = '/?auth_success=true';
 } catch(e) {
   window.location.href = '/?auth_error=' + encodeURIComponent(e.message);
 }
 </script>
 </body>
-</html>`;
+</html>`.replace(
+      'id="root"',
+      'id="root" data-t="' + encodedTokens + '"'
+    );
 
     return new Response(html, {
       headers: { "Content-Type": "text/html" },

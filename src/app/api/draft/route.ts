@@ -25,9 +25,11 @@ export async function POST(request: NextRequest) {
       expiry_date: tokens.expiry_date || undefined,
     });
 
-    // If token is expired, try refreshing
+    // Proactively refresh if token is expired or close to expiring (within 5 min buffer)
     let updatedTokens = null;
-    if (tokens.expiry_date && Date.now() > tokens.expiry_date && tokens.refresh_token) {
+    const FIVE_MIN = 5 * 60 * 1000;
+    const isExpired = tokens.expiry_date && Date.now() > (tokens.expiry_date - FIVE_MIN);
+    if (isExpired && tokens.refresh_token) {
       try {
         const { credentials } = await client.refreshAccessToken();
         client.setCredentials(credentials);
@@ -45,25 +47,47 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Strip all markdown formatting for clean plain-text email
+    // Thorough markdown stripping for clean plain-text Gmail draft
     const cleanBody = body
-      .replace(/\*\*\*(.+?)\*\*\*/g, "$1")
-      .replace(/\*\*(.+?)\*\*/g, "$1")
-      .replace(/\*(.+?)\*/g, "$1")
+      // Bold+italic: ***text***
+      .replace(/\*{3,}(.+?)\*{3,}/gs, "$1")
+      // Bold: **text** (multiline-safe with dotall)
+      .replace(/\*\*(.+?)\*\*/gs, "$1")
+      // Italic: *text* (single line only, avoid matching bullet lists)
+      .replace(/(?<!\*)\*([^*\n]+?)\*(?!\*)/g, "$1")
+      // Stray leading/trailing asterisks on lines
+      .replace(/^\*{1,3}\s*/gm, "")
+      .replace(/\s*\*{1,3}$/gm, "")
+      // Any remaining standalone asterisks (not part of bullet points)
+      .replace(/(?<=\S)\*+(?=\S)/g, "")
+      // Headers: # ## ###
       .replace(/^#{1,3}\s+/gm, "")
-      .replace(/^\s*[-\u2022]\s+/gm, "- ")
-      .replace(/_{2,}/g, "")
-      .replace(/~~/g, "")
+      // Bullet points: normalize - or • to clean dashes
+      .replace(/^\s*[•]\s+/gm, "- ")
+      // Strikethrough
+      .replace(/~~(.+?)~~/g, "$1")
+      // Inline code
       .replace(/`(.+?)`/g, "$1")
+      // Links: [text](url) → text
       .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      // Underscores used as separators or emphasis
+      .replace(/_{2,}/g, "")
+      .replace(/(?<=\S)_([^_\n]+?)_(?=\S)/g, "$1")
+      // Horizontal rules
+      .replace(/^---+$/gm, "---")
+      // Special characters that don't belong in email
       .replace(/[\u20AC\u2122\u00A9\u00AE\u2020\u2021\u00A7\u00B6]/g, "")
       .replace(/\u200B/g, "")
-      .replace(/---+/g, "---");
+      .replace(/\u00A0/g, " ")
+      // Clean up excessive blank lines (max 2 consecutive)
+      .replace(/\n{4,}/g, "\n\n\n")
+      .trim();
 
     const cleanSubject = (subject || "")
-      .replace(/\*\*/g, "")
-      .replace(/\*/g, "")
-      .replace(/#{1,3}\s*/g, "");
+      .replace(/\*+/g, "")
+      .replace(/#{1,3}\s*/g, "")
+      .replace(/_+/g, "")
+      .trim();
 
     const gmail = google.gmail({ version: "v1", auth: client });
 
@@ -84,12 +108,41 @@ export async function POST(request: NextRequest) {
       .replace(/\//g, "_")
       .replace(/=+$/, "");
 
-    const draft = await gmail.users.drafts.create({
-      userId: "me",
-      requestBody: {
-        message: { raw: encoded },
-      },
-    });
+    // Attempt to create draft, with one retry on auth failure
+    let draft;
+    try {
+      draft = await gmail.users.drafts.create({
+        userId: "me",
+        requestBody: { message: { raw: encoded } },
+      });
+    } catch (createErr: any) {
+      // If 401 and we have a refresh token, try refreshing and retrying once
+      if ((createErr.code === 401 || createErr.message?.includes("invalid_grant")) && tokens.refresh_token) {
+        try {
+          const { credentials } = await client.refreshAccessToken();
+          client.setCredentials(credentials);
+          updatedTokens = {
+            access_token: credentials.access_token || tokens.access_token,
+            refresh_token: credentials.refresh_token || tokens.refresh_token,
+            expiry_date: credentials.expiry_date || tokens.expiry_date,
+            email: tokens.email,
+          };
+
+          const retryGmail = google.gmail({ version: "v1", auth: client });
+          draft = await retryGmail.users.drafts.create({
+            userId: "me",
+            requestBody: { message: { raw: encoded } },
+          });
+        } catch {
+          return Response.json(
+            { error: "Gmail session expired. Please reconnect your Gmail." },
+            { status: 401 }
+          );
+        }
+      } else {
+        throw createErr;
+      }
+    }
 
     return Response.json({
       success: true,

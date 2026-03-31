@@ -56,27 +56,69 @@ body {
 }
 
 /* Email content styling */
+.email-content {
+  font-size: 0.8rem;
+}
 .email-content h1, .email-content h2, .email-content h3 {
   color: var(--text-primary);
   font-weight: 600;
-  margin-top: 1.5em;
-  margin-bottom: 0.5em;
+  margin-top: 1.2em;
+  margin-bottom: 0.4em;
 }
-.email-content h1 { font-size: 1.25rem; }
-.email-content h2 { font-size: 1.1rem; }
-.email-content h3 { font-size: 1rem; }
+.email-content h1 { font-size: 0.95rem; }
+.email-content h2 { font-size: 0.875rem; }
+.email-content h3 { font-size: 0.8rem; }
 .email-content p {
-  margin-bottom: 0.75em;
-  line-height: 1.7;
+  margin-bottom: 0.5em;
+  line-height: 1.6;
 }
 .email-content ul, .email-content ol {
-  margin-left: 1.5em;
-  margin-bottom: 0.75em;
+  margin-left: 1.25em;
+  margin-bottom: 0.5em;
 }
 .email-content li {
-  margin-bottom: 0.3em;
-  line-height: 1.6;
+  margin-bottom: 0.2em;
+  line-height: 1.5;
 }
 .email-content strong {
   color: var(--accent-cyan);
+}
+
+/* Touch-friendly scrolling */
+.overflow-y-auto, .overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Mobile tab bar safe area */
+.mobile-tab-bar {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Hide custom scrollbar on touch devices */
+@media (pointer: coarse) {
+  ::-webkit-scrollbar {
+    display: none;
+  }
+  * {
+    scrollbar-width: none;
+  }
+}
+
+/* Responsive email content */
+@media (max-width: 767px) {
+  .email-content {
+    font-size: 0.85rem;
+  }
+  .email-content h1 { font-size: 1rem; }
+  .email-content h2 { font-size: 0.925rem; }
+  .email-content h3 { font-size: 0.85rem; }
+  .email-content p {
+    line-height: 1.7;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .email-content {
+    font-size: 0.8rem;
+  }
 }
