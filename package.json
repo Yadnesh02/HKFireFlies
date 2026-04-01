@@ -26,6 +26,7 @@
   "devDependencies": {
     "@types/formidable": "^3.5.0",
     "@types/node": "^25.5.0",
+    "@types/pdfkit": "^0.17.5",
     "@types/react": "^19.2.14"
   }
 }
