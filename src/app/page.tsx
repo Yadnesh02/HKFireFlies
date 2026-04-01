@@ -206,14 +206,14 @@ export default function Home() {
       // Remove the subject line from body
       const body = generatedEmail.replace(/^Subject:\s*.+$/m, "").trim();
 
-      // Get participants from the selected recording for CC
+      // Get participants from the selected recording for To
       const selectedRecording = recordings.find((r) => r.id === selectedRecordingId);
-      const ccEmails = selectedRecording?.participants?.filter((p) => p && p.includes("@")) || [];
+      const toEmails = selectedRecording?.participants?.filter((p) => p && p.includes("@")) || [];
 
       const res = await fetch("/api/draft", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject, body, cc: ccEmails, tokens }),
+        body: JSON.stringify({ subject, body, to: toEmails.join(", "), tokens }),
       });
 
       const data = await res.json();
