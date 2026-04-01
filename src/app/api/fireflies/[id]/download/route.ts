@@ -177,7 +177,7 @@ export async function GET(
 
     if (format === "pdf") {
       const buffer = await generatePDF(title, date, blocks);
-      return new Response(buffer, {
+      return new Response(new Uint8Array(buffer), {
         headers: {
           "Content-Type": "application/pdf",
           "Content-Disposition": `attachment; filename="${fileName}.pdf"`,
@@ -185,7 +185,7 @@ export async function GET(
       });
     } else {
       const buffer = await generateDOCX(title, date, blocks);
-      return new Response(buffer, {
+      return new Response(new Uint8Array(buffer), {
         headers: {
           "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
           "Content-Disposition": `attachment; filename="${fileName}.docx"`,
