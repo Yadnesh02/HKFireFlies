@@ -206,10 +206,14 @@ export default function Home() {
       // Remove the subject line from body
       const body = generatedEmail.replace(/^Subject:\s*.+$/m, "").trim();
 
+      // Get participants from the selected recording for CC
+      const selectedRecording = recordings.find((r) => r.id === selectedRecordingId);
+      const ccEmails = selectedRecording?.participants?.filter((p) => p && p.includes("@")) || [];
+
       const res = await fetch("/api/draft", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject, body, tokens }),
+        body: JSON.stringify({ subject, body, cc: ccEmails, tokens }),
       });
 
       const data = await res.json();
@@ -630,7 +634,15 @@ export default function Home() {
                         <div className="flex items-center gap-2 mt-1">
                           {dateStr && <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>{dateStr}</span>}
                           {durationMin > 0 && <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>{durationMin}m</span>}
-                          {recording.participants.length > 0 && <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>{recording.participants.length} participants</span>}
+                          {recording.participants.length > 0 && (
+                            <span className="text-[10px] relative group/tip cursor-default" style={{ color: "var(--text-muted)" }}>
+                              {recording.participants.length} participants
+                              <span className="absolute bottom-full left-0 mb-1 hidden group-hover/tip:block z-50 px-2.5 py-2 rounded-lg text-[10px] leading-relaxed whitespace-pre-wrap max-w-[220px] shadow-xl border"
+                                style={{ background: "var(--bg-card)", borderColor: "var(--border-default)", color: "var(--text-primary)" }}>
+                                {recording.participants.filter((p: string) => p).join("\n") || "No emails available"}
+                              </span>
+                            </span>
+                          )}
                         </div>
                       </div>
                       {isSelected && !isLoading && <span className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 bg-cyan-400" />}

@@ -4,7 +4,7 @@ import { getOAuth2Client } from "@/lib/google-auth";
 
 export async function POST(request: NextRequest) {
   try {
-    const { subject, body, to, tokens } = await request.json();
+    const { subject, body, to, cc, tokens } = await request.json();
 
     if (!body) {
       return Response.json({ error: "Email body is required" }, { status: 400 });
@@ -97,6 +97,10 @@ export async function POST(request: NextRequest) {
       "MIME-Version: 1.0",
     ];
     if (to) messageParts.push("To: " + to);
+    if (cc) {
+      const ccList = Array.isArray(cc) ? cc.join(", ") : cc;
+      if (ccList) messageParts.push("Cc: " + ccList);
+    }
     if (cleanSubject) messageParts.push("Subject: " + cleanSubject);
     messageParts.push("", cleanBody);
 
