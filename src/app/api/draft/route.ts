@@ -87,6 +87,27 @@ export async function POST(request: NextRequest) {
       .replace(/\*+/g, "")
       .replace(/#{1,3}\s*/g, "")
       .replace(/_+/g, "")
+      // Fix mojibake: UTF-8 bytes misread as latin1
+      .replace(/\xC3\xA2\xC2\x80\xC2\x93/g, "\u2013") // en dash
+      .replace(/\xC3\xA2\xC2\x80\xC2\x94/g, "\u2014") // em dash
+      .replace(/\xC3\xA2\xC2\x80\xC2\x99/g, "\u2019") // right single quote
+      .replace(/\xC3\xA2\xC2\x80\xC2\x98/g, "\u2018") // left single quote
+      .replace(/\xC3\xA2\xC2\x80\xC2\x9C/g, "\u201C") // left double quote
+      .replace(/\xC3\xA2\xC2\x80\xC2\x9D/g, "\u201D") // right double quote
+      .replace(/\xC3\xA2\xC2\x80\xC2\xA6/g, "\u2026") // ellipsis
+      // Common garbled patterns (â€" â€" â€™ etc.)
+      .replace(/\u00E2\u20AC\u201C/g, "\u2013")
+      .replace(/\u00E2\u20AC\u201D/g, "\u2014")
+      .replace(/\u00E2\u20AC\u2122/g, "\u2019")
+      .replace(/\u00E2\u20AC\u0153/g, "\u201C")
+      .replace(/\u00E2\u20AC\u0178/g, "\u2014")
+      .replace(/â€"/g, "\u2014") // em dash literal
+      .replace(/â€"/g, "\u2013") // en dash literal
+      .replace(/â€™/g, "\u2019") // right quote literal
+      .replace(/â€˜/g, "\u2018") // left quote literal
+      .replace(/â€œ/g, "\u201C") // left double quote literal
+      .replace(/â€\u009D/g, "\u201D") // right double quote literal
+      .replace(/â€¦/g, "\u2026") // ellipsis literal
       .trim();
 
     const gmail = google.gmail({ version: "v1", auth: client });
@@ -101,7 +122,11 @@ export async function POST(request: NextRequest) {
       const ccList = Array.isArray(cc) ? cc.join(", ") : cc;
       if (ccList) messageParts.push("Cc: " + ccList);
     }
-    if (cleanSubject) messageParts.push("Subject: " + cleanSubject);
+    if (cleanSubject) {
+      // RFC 2047 encode subject for proper UTF-8 support in email headers
+      const encodedSubject = "=?UTF-8?B?" + Buffer.from(cleanSubject, "utf-8").toString("base64") + "?=";
+      messageParts.push("Subject: " + encodedSubject);
+    }
     messageParts.push("", cleanBody);
 
     const rawMessage = messageParts.join("\r\n");
