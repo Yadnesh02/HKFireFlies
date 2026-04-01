@@ -56,6 +56,7 @@ export default function Home() {
   const [selectedRecordingId, setSelectedRecordingId] = useState<string | null>(null);
   const [loadingTranscriptId, setLoadingTranscriptId] = useState<string | null>(null);
   const [recordingsSearch, setRecordingsSearch] = useState("");
+  const [downloadDropdownId, setDownloadDropdownId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const emailPanelRef = useRef<HTMLDivElement>(null);
 
@@ -102,8 +103,12 @@ export default function Home() {
     restoreGmailTokens();
   }, []);
 
-  // Auth gate: only whitelisted emails can use the app
-  const isAuthorized = gmailConnected && ALLOWED_EMAILS.includes(gmailEmail.toLowerCase());
+  // Auth gate: only whitelisted emails can use the app (bypassed on localhost)
+  const [isLocalhost, setIsLocalhost] = useState(false);
+  useEffect(() => {
+    setIsLocalhost(window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+  }, []);
+  const isAuthorized = isLocalhost || (gmailConnected && ALLOWED_EMAILS.includes(gmailEmail.toLowerCase()));
 
   // Fetch Fireflies recordings only when authorized
   const fetchRecordings = useCallback(async () => {
@@ -151,6 +156,19 @@ export default function Home() {
       setLoadingTranscriptId(null);
     }
   }, [loadingTranscriptId]);
+
+  // Close download dropdown on outside click
+  useEffect(() => {
+    if (!downloadDropdownId) return;
+    const handleClick = () => setDownloadDropdownId(null);
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
+  }, [downloadDropdownId]);
+
+  const handleDownload = useCallback((recordingId: string, format: "pdf" | "docx") => {
+    setDownloadDropdownId(null);
+    window.open("/api/fireflies/" + recordingId + "/download?format=" + format, "_blank");
+  }, []);
 
   const handleConnectGmail = useCallback(() => {
     window.location.href = "/api/auth/google";
@@ -600,23 +618,54 @@ export default function Home() {
               const isLoading = loadingTranscriptId === recording.id;
               const dateStr = recording.date ? new Date(recording.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "";
               const durationMin = recording.duration ? Math.round(recording.duration / 60) : 0;
+              const isDropdownOpen = downloadDropdownId === recording.id;
               return (
-                <button key={recording.id} onClick={() => handleSelectRecording(recording)} disabled={isLoading}
-                  className="w-full text-left px-3 py-3 md:py-2 border-b transition-all hover:bg-cyan-900/10 active:bg-cyan-900/20"
-                  style={{ borderColor: "var(--border-default)", background: isSelected ? "rgba(6,182,212,0.08)" : "transparent", borderLeft: isSelected ? "2px solid var(--accent-cyan)" : "2px solid transparent" }}>
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-medium truncate" style={{ color: isSelected ? "var(--accent-cyan)" : "var(--text-primary)" }}>{isLoading ? "Loading..." : recording.title}</div>
-                      <div className="flex items-center gap-2 mt-1">
-                        {dateStr && <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>{dateStr}</span>}
-                        {durationMin > 0 && <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>{durationMin}m</span>}
-                        {recording.participants.length > 0 && <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>{recording.participants.length} participants</span>}
+                <div key={recording.id} className="relative border-b" style={{ borderColor: "var(--border-default)" }}>
+                  <button onClick={() => handleSelectRecording(recording)} disabled={isLoading}
+                    className="w-full text-left px-3 pr-9 py-3 md:py-2 transition-all hover:bg-cyan-900/10 active:bg-cyan-900/20"
+                    style={{ background: isSelected ? "rgba(6,182,212,0.08)" : "transparent", borderLeft: isSelected ? "2px solid var(--accent-cyan)" : "2px solid transparent" }}>
+                    <div className="flex items-start justify-between gap-1.5">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium truncate" style={{ color: isSelected ? "var(--accent-cyan)" : "var(--text-primary)" }}>{isLoading ? "Loading..." : recording.title}</div>
+                        <div className="flex items-center gap-2 mt-1">
+                          {dateStr && <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>{dateStr}</span>}
+                          {durationMin > 0 && <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>{durationMin}m</span>}
+                          {recording.participants.length > 0 && <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>{recording.participants.length} participants</span>}
+                        </div>
                       </div>
+                      {isSelected && !isLoading && <span className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 bg-cyan-400" />}
+                      {isLoading && <svg className="animate-spin mt-1 shrink-0" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: "var(--accent-cyan)" }}><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>}
                     </div>
-                    {isSelected && !isLoading && <span className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 bg-cyan-400" />}
-                    {isLoading && <svg className="animate-spin mt-1 shrink-0" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: "var(--accent-cyan)" }}><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>}
-                  </div>
-                </button>
+                  </button>
+                  {/* Download button */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setDownloadDropdownId(isDropdownOpen ? null : recording.id); }}
+                    className="absolute top-2 right-2 p-1.5 rounded transition-colors hover:bg-cyan-900/30"
+                    style={{ color: "var(--text-muted)" }}
+                    title="Download transcript"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" x2="12" y1="15" y2="3" />
+                    </svg>
+                  </button>
+                  {/* Format dropdown */}
+                  {isDropdownOpen && (
+                    <div className="absolute top-8 right-2 z-50 rounded-lg border shadow-xl py-1 min-w-[90px] animate-fade-in"
+                      style={{ background: "var(--bg-card)", borderColor: "var(--border-default)" }}
+                      onClick={(e) => e.stopPropagation()}>
+                      <button onClick={() => handleDownload(recording.id, "pdf")}
+                        className="w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors hover:bg-cyan-900/20 flex items-center gap-2"
+                        style={{ color: "var(--text-primary)" }}>
+                        <span style={{ color: "#ef4444" }}>PDF</span>
+                      </button>
+                      <button onClick={() => handleDownload(recording.id, "docx")}
+                        className="w-full text-left px-3 py-1.5 text-[11px] font-medium transition-colors hover:bg-cyan-900/20 flex items-center gap-2"
+                        style={{ color: "var(--text-primary)" }}>
+                        <span style={{ color: "#3b82f6" }}>DOCX</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               );
             })
         )}
